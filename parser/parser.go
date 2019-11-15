@@ -40,26 +40,25 @@ func ParseMethodArgs(types, args []string) ([]byte, error) {
 		return nil, fmt.Errorf("Mismatched length, expected %d got %d", len(types), len(args))
 	}
 	var b []byte
-	var err error
 	for i := range types {
 		// Get parsed value
 		o, err := ParseValue(types[i], args[i])
 		if err != nil {
-			break
+			return b, err
 		}
 		// Pack the variable
 		t, err := abi.NewType(types[i], types[i], nil)
 		if err != nil {
-			break
+			return b, err
 		}
 		a := abi.Arguments{{Type: t}}
 		p, err := a.Pack(o)
 		if err != nil {
-			break
+			return b, err
 		}
 		b = append(b, p...)
 	}
-	return b, err
+	return b, nil
 }
 
 func ParseMethod(methodSig string, args []string) ([]byte, error) {
@@ -193,7 +192,6 @@ func ParseValue(s, v string) (interface{}, error) {
 		break
 	default:
 		return o, fmt.Errorf("Invalid type '%s'", s)
-		break
 	}
 	return o, nil
 }
