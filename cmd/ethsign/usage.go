@@ -47,7 +47,7 @@ ARGUMENTS
 EXAMPLES
 
   Sending ether:
-    ethsign send --to 0x0000000000000000000000000000000000000000 --key keyfile.json --value 0.05
+    ethsign ether --to 0x0000000000000000000000000000000000000000 --key keyfile.json --value 0.05
 
   Transfer ERC-20 tokens:
     ethsign call "transfer(address,uint256)" 0xffffffffffffffffffffffffffffffffffffffff 42 --key keyfile.json
@@ -60,5 +60,5 @@ EXAMPLES
     ethsign deploy constructor(string,uint256) arg1 arg2 --bin contract.bin --key keyfile.json
 
   Generating a QR-Code (using 'qr-code' tool: 'go get github.com/juztin/qr-code')
-    qrcode echo "https://etherscan.io/pushTx?hex=0x$(ethsign send --to 0xffffffffffffffffffffffffffffffffffffffff --value 0.25 --key keyfile.key --nonce 42 -gasPrice 2 -gasLimit 21000)" > transaction.png
+    qrcode echo "https://etherscan.io/pushTx?hex=0x$(ethsign ether --to 0xffffffffffffffffffffffffffffffffffffffff --value 0.25 --key keyfile.key --nonce 42 -gasPrice 2 -gasLimit 21000)" > transaction.png
 `

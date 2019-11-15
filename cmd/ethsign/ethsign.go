@@ -87,7 +87,7 @@ func init() {
 	flag.Usage = usage
 	flag.Parse()
 	if pos < 2 {
-		checkErr(errors.New("Missing required command: [send, call, deploy]"))
+		checkErr(errors.New("Missing required command: [ether, call, deploy]"))
 	}
 	switch os.Args[1] {
 	case "call":
@@ -99,8 +99,11 @@ func init() {
 	case "ether":
 		cmd = ETHER
 		break
+	case "help":
+		flag.Usage()
+		break
 	default:
-		checkErr(fmt.Errorf("Invalid command: '%s', must be one of [send, call, deploy]", os.Args[1]))
+		checkErr(fmt.Errorf("Invalid command: '%s', must be one of [ether, call, deploy]", os.Args[1]))
 	}
 	if pos > 2 {
 		args = os.Args[2:pos]

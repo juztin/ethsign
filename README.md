@@ -13,7 +13,7 @@ Utility to generate raw/signed Ethereum transactions offline.
 ##### Sending Ethereum
 
 ```
-ethsign send --to 0x0000000000000000000000000000000000000000 --key keyfile.json --value 0.05
+ethsign ether --to 0x0000000000000000000000000000000000000000 --key keyfile.json --value 0.05
 ```
 
 ##### Send a message to a contract _(ERC-20 transfer)_
@@ -51,7 +51,7 @@ go get github.com/juztin/qr-code
 
 Create a QR Code for submission directly to [etherscan](https://etherscan.io)
 ```
-qrcode echo "https://etherscan.io/pushTx?hex=0x$(ethsign send --to 0xffffffffffffffffffffffffffffffffffffffff --value 0.25 --key keyfile.key --nonce 42 -gasPrice 2 -gasLimit 21000)" > transaction.png
+qrcode echo "https://etherscan.io/pushTx?hex=0x$(ethsign ether --to 0xffffffffffffffffffffffffffffffffffffffff --value 0.25 --key keyfile.key --nonce 42 -gasPrice 2 -gasLimit 21000)" > transaction.png
 ```
 
 
