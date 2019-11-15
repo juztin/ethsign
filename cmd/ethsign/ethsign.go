@@ -16,15 +16,28 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"golang.org/x/crypto/ssh/terminal"
 
-	"github.com/juztin/ethsign"
 	"github.com/juztin/ethsign/encoding"
 	"github.com/juztin/ethsign/flags"
+	"github.com/juztin/ethsign/parser"
+)
+
+type command int
+type signFunc func(*types.Transaction, *big.Int, string) (*types.Transaction, error)
+
+const (
+	CALL = iota
+	DEPLOY
+	ETHER
 )
 
 var (
 	// args
-	args     []string
-	funcName string
+	args       []string
+	cmd        command
+	keyPath    string
+	method     string
+	methodArgs []string
+	signFn     signFunc
 
 	// flags
 	abiFlag       flags.FileFlag
@@ -34,10 +47,10 @@ var (
 	recipientFlag flags.AddressFlag
 
 	chainFlag    = flags.BigInt(big.NewInt(1337))
+	gasPriceFlag = flags.BigInt(big.NewInt(1))
+	gasLimitFlag = flag.Uint64("gasLimit", 100000, "The gas limit, in Gwei")
 	helpFlag     = flag.Bool("help", false, "Print ethsign usage")
 	nonceFlag    = flag.Uint64("nonce", 0, "Next nonce for the address signing the transaction")
-	gasPriceFlag = flags.BigInt(big.NewInt(21000))
-	gasLimitFlag = flag.Uint64("gasLimit", 1000000, "The gas limit, in Gwei")
 	valueFlag    = flags.BigInt(big.NewInt(0))
 )
 
@@ -46,13 +59,24 @@ func init() {
 	//flag.StringVar(keyFile, "k", "", "Private key file path")
 
 	flag.Var(&abiFlag, "abi", "Contract ABI file")
-	flag.Var(&binFlag, "bin", "Contract BIN file")
+	flag.Var(&binFlag, "bin", "Contract BIN file, for contract deployments")
 	flag.Var(&chainFlag, "chain", "Chain ID (default l337)")
+	flag.Var(&gasPriceFlag, "gasPrice", "The gas price to use, in Gwei (default 1)")
 	flag.Var(&keyFlag, "key", "Private key filepath")
 	flag.Var(&keystoreFlag, "keystore", "Private go-ethereum keystore filepath")
 	flag.Var(&recipientFlag, "to", "The recipient address to send the transaction to")
-	flag.Var(&gasPriceFlag, "gasPrice", "The gas price to use, in Gwei (default 21000)")
 	flag.Var(&valueFlag, "value", "The amount of Ether to send with the transaction (default 0)")
+
+	//pos := 0
+	//for i := 1; i < len(os.Args); i++ {
+	//	if pos == 0 {
+	//		if len(os.Args[i]) > 0 && os.Args[i][0] == '-' {
+	//			pos = i
+	//		}
+	//	} else if os.Args[i][0] != '-' {
+	//		checkErr(errors.New("Argument exists after flag(s)"))
+	//	}
+	//}
 
 	pos := 1
 	for ; pos < len(os.Args); pos++ {
@@ -60,19 +84,105 @@ func init() {
 			break
 		}
 	}
-	//flag.Usage = usage
-	//flag.Parse()
-	if pos > 1 {
-		funcName = os.Args[1]
-		if pos > 2 {
-			args = os.Args[2:pos]
-		}
+	flag.Usage = usage
+	flag.Parse()
+	if pos < 2 {
+		checkErr(errors.New("Missing required command: [send, call, deploy]"))
+	}
+	switch os.Args[1] {
+	case "call":
+		cmd = CALL
+		break
+	case "deploy":
+		cmd = DEPLOY
+		break
+	case "ether":
+		cmd = ETHER
+		break
+	default:
+		checkErr(fmt.Errorf("Invalid command: '%s', must be one of [send, call, deploy]", os.Args[1]))
+	}
+	if pos > 2 {
+		args = os.Args[2:pos]
 	}
 	flag.CommandLine.Parse(os.Args[pos:])
 }
 
+func checkErr(err error) {
+	if err == nil {
+		return
+	}
+	fmt.Fprintln(os.Stderr, err)
+	os.Exit(1)
+}
+
+func usage() {
+	fmt.Println(USAGE)
+}
+
+func validateArgs() error {
+	if *helpFlag {
+		flag.Usage()
+		os.Exit(0)
+	}
+
+	// Validate key/keystore
+	if keystoreFlag.String() == "" && keyFlag.String() == "" {
+		return errors.New("Must specify either a key, or keystore file [--key, --keystore]")
+	} else if keystoreFlag.String() != "" && keyFlag.String() != "" {
+		return errors.New("May only specify either --key or --keystore, not both")
+	} else {
+	}
+	signFn = signTxWithKeystore
+	keyPath = keystoreFlag.String()
+	if keyPath == "" {
+		signFn = signTxWithKey
+		keyPath = keyFlag.String()
+	}
+
+	// Ensure `Value` is non-negative
+	if valueFlag.Value().Cmp(big.NewInt(0)) < 0 {
+		return errors.New("Can't send negative Ether")
+	}
+
+	// Ensure `Nonce` is non-negative
+	if *nonceFlag < 0 {
+		return errors.New("Nonce must bea non-negative")
+	}
+
+	var err error
+	switch cmd {
+	case CALL:
+		if len(args) == 0 {
+			if abiFlag.String() == "" {
+				err = errors.New("Must specify function signature")
+			} else {
+				err = errors.New("Must specify ABI function name")
+			}
+		}
+		method = args[0]
+		methodArgs = args[1:]
+		break
+	case DEPLOY:
+		if binFlag.String() == "" {
+			err = errors.New("Must specify bin file for contract deployment [--bin]")
+		} else if recipientFlag.IsSet() {
+			err = errors.New("Recipient can't be set for contract deployment")
+		}
+		methodArgs = args
+		break
+	case ETHER:
+		if recipientFlag.IsSet() == false {
+			err = errors.New("Must specify a recipient to send ether [--recipient]")
+		} else if len(args) > 1 {
+			err = errors.New("Can't supply multiple arguments/messages within a transaction")
+		}
+		break
+	}
+	return err
+}
+
 func readABI(abiFile string) (abi.ABI, error) {
-	// Read ABI file
 	r, err := os.Open(abiFile)
 	if err != nil {
 		return abi.ABI{}, err
@@ -88,41 +198,7 @@ func readBin(binFile string) ([]byte, error) {
 	return hex.DecodeString(string(b))
 }
 
-//func readABIandBIN(abiFile, binFile string) (abi.ABI, []byte, error) {
-//	a, err := readABI(abiFile)
-//	if err != nil {
-//		return a, nil, err
-//	}
-//	b, err := ioutil.ReadFile(binFile)
-//	return a, b, err
-//}
-
-func deployInput(args []string, abiFile, binFile string) ([]byte, error) {
-	//var err error
-	//if abiFlag.String() == "" {
-	//	err = errors.New("flag -abi is required when -bin is supplied")
-	//} else if recipientFlag.IsSet() {
-	//	err = errors.New("flag -to can't be set for contract deployments (when -bin is set)")
-	//}
-	//if err != nil {
-	//	fmt.Println(err)
-	//	flag.Usage()
-	//	os.Exit(1)
-	//}
-
-	input, err := callInput("constructor", args, abiFile)
-	if err != nil {
-		return nil, err
-	}
-	b, err := readBin(binFile)
-	return append(b, input...), err
-}
-
-func sendEtherInput() ([]byte, error) {
-	return nil, nil
-}
-
-func callInput(funcName string, args []string, abiFile string) ([]byte, error) {
+func callInputABI(funcName string, args []string, abiFile string) ([]byte, error) {
 	a, err := readABI(abiFile)
 	if err != nil {
 		return nil, err
@@ -131,8 +207,7 @@ func callInput(funcName string, args []string, abiFile string) ([]byte, error) {
 	// Ensure the given function name exists within the ABI
 	var m abi.Method
 	ok := true
-	if funcName == "constructor" {
-		funcName = ""
+	if funcName == "" {
 		m = a.Constructor
 	} else if m, ok = a.Methods[funcName]; !ok {
 		return nil, errors.New("missing function in ABI")
@@ -147,6 +222,31 @@ func callInput(funcName string, args []string, abiFile string) ([]byte, error) {
 	// Generate packed call
 	input, err := a.Pack(funcName, funcArgs...)
 	return input, err
+}
+
+func deployInputABI(args []string, binFile, abiFile string) ([]byte, error) {
+	input, err := callInputABI("", args, abiFile)
+	if err != nil {
+		return input, err
+	}
+	b, err := readBin(binFile)
+	return append(b, input...), err
+}
+
+func deployInputRaw(methodSig string, args []string, binFile string) ([]byte, error) {
+	input, err := parser.ParseMethod("", args)
+	if err != nil {
+		return input, err
+	}
+	b, err := readBin(binFile)
+	return append(b, input...), err
+}
+
+func etherInput(args []string) ([]byte, error) {
+	if len(args) == 0 {
+		return nil, nil
+	}
+	return []byte(args[0]), nil
 }
 
 func signTxWithKeystore(tx *types.Transaction, chainID *big.Int, keyPath string) (*types.Transaction, error) {
@@ -184,56 +284,47 @@ func signTxWithKey(tx *types.Transaction, chainID *big.Int, keyPath string) (*ty
 }
 
 func main() {
-	if *helpFlag {
-		fmt.Println(ethsign.USAGE)
-		os.Exit(0)
-	}
-
-	var err error
-	var input []byte
-	var tx *types.Transaction
-
-	if len(args) == 0 {
-		input, err = sendEtherInput()
-		tx = types.NewTransaction(*nonceFlag, recipientFlag.Value, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), input)
-	} else if binFlag.String() != "" {
-		input, err = deployInput(args, abiFlag.String(), binFlag.String())
-		err = errors.New("boom")
-		tx = types.NewContractCreation(*nonceFlag, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), input)
-	} else {
-		input, err = callInput(funcName, args, abiFlag.String())
-		tx = types.NewTransaction(*nonceFlag, recipientFlag.Value, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), input)
-	}
-
-	if keystoreFlag.String() != "" {
-		tx, err = signTxWithKeystore(tx, chainFlag.Value(), keystoreFlag.String())
-	} else {
-		tx, err = signTxWithKey(tx, chainFlag.Value(), keyFlag.String())
-	}
+	err := validateArgs()
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Fprintf(os.Stderr, "%s\n\nfor help, '%s --help'", err, os.Args[0])
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+
+	// Create transaction
+	var input []byte
+	var tx *types.Transaction
+	switch cmd {
+	case CALL:
+		if abiFlag.String() == "" {
+			input, err = parser.ParseMethod(method, methodArgs)
+		} else {
+			input, err = callInputABI(method, methodArgs, abiFlag.String())
+		}
+		tx = types.NewTransaction(*nonceFlag, recipientFlag.Value, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), input)
+		break
+	case DEPLOY:
+		if abiFlag.String() == "" {
+			input, err = deployInputRaw(method, args, binFlag.String())
+		} else {
+			input, err = deployInputABI(args, binFlag.String(), abiFlag.String())
+		}
+		tx = types.NewContractCreation(*nonceFlag, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), input)
+		break
+	case ETHER:
+		input, err = etherInput(args)
+		tx = types.NewTransaction(*nonceFlag, recipientFlag.Value, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), input)
+		break
+	}
+
+	// Sign transaction
+	checkErr(err)
+	tx, err = signFn(tx, chainFlag.Value(), keyPath)
+	checkErr(err)
+
+	// Print raw, signed, hex-string transaction
 	t := types.Transactions{tx}
 	rawTxBytes := t.GetRlp(0)
 	rawTxHex := hex.EncodeToString(rawTxBytes)
 	fmt.Printf(rawTxHex)
-
-	//fmt.Printf("input: 0x%x\n", input)
-	//fmt.Println("error:", err)
-	//fmt.Println("----------------------------------------")
-	//fmt.Println("args:", args)
-	//fmt.Println("function: ", funcName)
-
-	//fmt.Println("abi:", abiFlag.String())
-	//fmt.Println("bin:", binFlag.String())
-	//fmt.Println("chain:", chainFlag.Value())
-	//fmt.Println("keyFile:", keyFlag.String())
-	//fmt.Println("nonce:", *nonceFlag)
-	//fmt.Println("gasPrice:", gasPriceFlag.Value())
-	//fmt.Println("gasLimit:", *gasLimitFlag)
-	//fmt.Println("recipient:", recipientFlag.String())
-	//fmt.Println("value:", valueFlag.Value())
-
-	//fmt.Println("signedTx:", rawTxHex)
 }
