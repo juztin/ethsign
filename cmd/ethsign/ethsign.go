@@ -51,7 +51,7 @@ var (
 	gasLimitFlag = flag.Uint64("gasLimit", 100000, "The gas limit, in Gwei")
 	helpFlag     = flag.Bool("help", false, "Print ethsign usage")
 	nonceFlag    = flag.Uint64("nonce", 0, "Next nonce for the address signing the transaction")
-	valueFlag    = flags.BigInt(big.NewInt(0))
+	valueFlag    = flags.Ether(big.NewInt(0))
 )
 
 func init() {
@@ -130,17 +130,18 @@ func validateArgs() error {
 	}
 
 	// Validate key/keystore
-	if keystoreFlag.String() == "" && keyFlag.String() == "" {
-		return errors.New("Must specify either a key, or keystore file [--key, --keystore]")
-	} else if keystoreFlag.String() != "" && keyFlag.String() != "" {
-		return errors.New("May only specify either --key or --keystore, not both")
-	} else {
-	}
-	signFn = signTxWithKeystore
-	keyPath = keystoreFlag.String()
+	keyPath = keyFlag.String()
 	if keyPath == "" {
+		return errors.New("Must specify key, or keystore file [--key]")
+	}
+	fi, err := os.Stat(keyPath)
+	if err != nil {
+		return fmt.Errorf("Must specify a valid key, or keystore file, %v", err)
+	}
+	if fi.Size() == 0x40 {
 		signFn = signTxWithKey
-		keyPath = keyFlag.String()
+	} else {
+		signFn = signTxWithKeystore
 	}
 
 	// Ensure `Value` is non-negative
@@ -153,7 +154,6 @@ func validateArgs() error {
 		return errors.New("Nonce must bea non-negative")
 	}
 
-	var err error
 	switch cmd {
 	case CALL:
 		if len(args) == 0 {
@@ -295,28 +295,28 @@ func main() {
 	}
 
 	// Create transaction
-	var input []byte
+	var data []byte
 	var tx *types.Transaction
 	switch cmd {
 	case CALL:
 		if abiFlag.String() == "" {
-			input, err = parser.ParseMethod(method, methodArgs)
+			data, err = parser.ParseMethod(method, methodArgs)
 		} else {
-			input, err = callInputABI(method, methodArgs, abiFlag.String())
+			data, err = callInputABI(method, methodArgs, abiFlag.String())
 		}
-		tx = types.NewTransaction(*nonceFlag, recipientFlag.Value, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), input)
+		tx = types.NewTransaction(*nonceFlag, recipientFlag.Value, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), data)
 		break
 	case DEPLOY:
 		if abiFlag.String() == "" {
-			input, err = deployInputRaw(method, args, binFlag.String())
+			data, err = deployInputRaw(method, args, binFlag.String())
 		} else {
-			input, err = deployInputABI(args, binFlag.String(), abiFlag.String())
+			data, err = deployInputABI(args, binFlag.String(), abiFlag.String())
 		}
-		tx = types.NewContractCreation(*nonceFlag, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), input)
+		tx = types.NewContractCreation(*nonceFlag, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), data)
 		break
 	case ETHER:
-		input, err = etherInput(args)
-		tx = types.NewTransaction(*nonceFlag, recipientFlag.Value, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), input)
+		data, err = etherInput(args)
+		tx = types.NewTransaction(*nonceFlag, recipientFlag.Value, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), data)
 		break
 	}
 

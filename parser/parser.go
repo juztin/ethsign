@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -13,29 +14,62 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-func ParseMethodString(s string) ([]byte, []string, error) {
-	// Must be at-least "f()"
-	if len(s) <= 3 {
-		return nil, nil, errors.New("Invalid, or empty call")
+var defaults = map[string]string{
+	"address": "0x0000000000000000000000000000000000000000",
+	"bool":    "false",
+	"string":  "",
+}
+
+// ParseValue parses the given value to the corresponding kind
+func ParseValue(kind, value string) (interface{}, error) {
+	begin := strings.Index(kind, "[")
+	// Non array
+	if begin < 0 {
+		return parseValue(kind, value)
 	}
+	// Array
+	k := kind[:begin]
+	args := kind[begin:]
+	var ok bool
+	ok, value = isValidArrayArgs(args, value)
+	if !ok {
+		return nil, errors.New("Invalid or mismatched array signature and/or value")
+	}
+	t, err := typeForKind(k)
+	if err != nil {
+		return nil, err
+	}
+	o, err := parseArray(t, k, value)
+	return o, err
+}
+
+// ParseMethod parses the given args to the corresponding types found within the method signature, returning the raw data
+func ParseMethod(method string, args []string) ([]byte, error) {
 	// Remove all whitespace – " test( string, bool)" => "test(string,bool)"
-	s = strings.Replace(s, " ", "", -1)
-	// Ensure we end with a paren
-	if s[len(s)-1] != ')' {
-		return nil, nil, errors.New("invalid method signature")
+	method = strings.Replace(method, " ", "", -1)
+	sig, methodArgs, err := parseMethodString(method)
+	if err != nil {
+		return nil, err
 	}
-	// Grab the first paren
-	i := strings.Index(s, "(")
-	// Must be after the first character "f()", "ffff()", etc.
-	if i < 1 {
-		return nil, nil, errors.New("invalid method signature")
+	data, err := parseMethodArgs(methodArgs, args)
+	if err != nil {
+		return data, err
 	}
-	args := strings.Split(s[i+1:len(s)-1], ",")
+	return append(sig, data...), nil
+}
+
+func parseMethodString(s string) ([]byte, []string, error) {
+	// Must have an open parent and be at-least "f()"
+	start, end := strings.Index(s, "("), strings.Index(s, ")")
+	if start < 1 || end < start || end != len(s)-1 || len(s) <= 3 {
+		return nil, nil, errors.New("Invalid call")
+	}
+	args := strings.Split(s[start+1:end], ",")
 	sig := crypto.Keccak256([]byte(s))[:4]
 	return sig, args, nil
 }
 
-func ParseMethodArgs(types, args []string) ([]byte, error) {
+func parseMethodArgs(types, args []string) ([]byte, error) {
 	if len(types) != len(args) {
 		return nil, fmt.Errorf("Mismatched length, expected %d got %d", len(types), len(args))
 	}
@@ -61,16 +95,77 @@ func ParseMethodArgs(types, args []string) ([]byte, error) {
 	return b, nil
 }
 
-func ParseMethod(methodSig string, args []string) ([]byte, error) {
-	data, methodArgs, _ := ParseMethodString(methodSig)
-	input, err := ParseMethodArgs(methodArgs, args)
-	if err != nil {
-		return data, err
+func isValidArrayArgs(signature, value string) (bool, string) {
+	// Very basic validation check ensuring signature and value end with a closing bracket, and the value also starts with an opening bracket
+	if len(signature) < 2 || len(value) < 2 {
+		return false, ""
+	} else if signature[len(signature)-1] != ']' {
+		return false, ""
+	} else if value[0] != '[' || value[len(value)-1] != ']' {
+		return false, ""
 	}
-	return append(data, input...), nil
+
+	// Remove all non-quotes spaces (TODO: do we really need to check all other chars? tabs, etc.)
+	// Ensure '[' have matching ']'
+	b := true
+	start, end := 0, 0
+	v := make([]byte, len(value))
+	count := 0
+	for i := 0; i < len(value); i++ {
+		switch value[i] {
+		case '"':
+			b = !b
+			continue
+		case ' ':
+			if b {
+				continue
+			}
+		case '[':
+			start++
+			break
+		case ']':
+			end++
+			break
+		}
+		if start < 0 || end < 0 {
+			return false, ""
+		}
+		v[count] = value[i]
+		count++
+	}
+	b = b && start-end == 0
+	return b, string(v[:count])
 }
 
-func ParseValue(s, v string) (interface{}, error) {
+func typeForKind(kind string) (reflect.Type, error) {
+	// Get the type, using the default value
+	d, ok := defaults[kind]
+	if !ok {
+		d = "0"
+	}
+	v, err := parseValue(kind, d)
+	if err != nil {
+		return nil, err
+	}
+	return reflect.TypeOf(v), nil
+}
+
+func parseArray(t reflect.Type, kind, val string) (interface{}, error) {
+	// TODO: Support multi-dimensional arrays
+	// Create the array and populate it with the parsed valued
+	o := reflect.New(reflect.SliceOf(t)).Elem()
+	s := strings.Split(val[1:len(val)-1], ",")
+	for i := range s {
+		p, err := parseValue(kind, s[i])
+		if err != nil {
+			return o, err
+		}
+		o = reflect.Append(o, reflect.ValueOf(p))
+	}
+	return o.Interface(), nil
+}
+
+func parseValue(s, v string) (interface{}, error) {
 	var o interface{}
 	switch s {
 	case "address":

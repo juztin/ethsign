@@ -58,6 +58,6 @@ qrcode echo "https://etherscan.io/pushTx?hex=0x$(ethsign ether --to 0xffffffffff
 #### TODO
 
  - [x] Support non-ABI calls
- - [ ] Support arrays in non-ABI calls
- - [ ] Support multi-dimensional arrays in non-ABI calls
+ - [x] Support arrays
+ - [ ] Support multi-dimensional arrays
  - [ ] Tests
