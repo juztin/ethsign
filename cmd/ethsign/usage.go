@@ -47,13 +47,13 @@ ARGUMENTS
 EXAMPLES
 
   Sending ether:
-    ethsign ether --to 0x0000000000000000000000000000000000000000 --key keyfile.json --value 0.05
+    ethsign ether --to 0x1111111111111111111111111111111111111111 --key keyfile.json --value 0.05
 
   Transfer ERC-20 tokens:
     ethsign call "transfer(address,uint256)" 0xffffffffffffffffffffffffffffffffffffffff 42 --key keyfile.json
 
   Function call from contract ABI
-    ethsign call funcName arg1 arg2 --to 0x0000000000000000000000000000000000000000 --abi contract.abi --key keyfile.txt
+    ethsign call funcName arg1 arg2 --to 0x1111111111111111111111111111111111111111 --abi contract.abi --key keyfile.txt
 
   Contract deployment, with constructor arguments
     ethsign deploy arg1 arg2 --abi contract.abi --bin contract.bin --key keyfile.json

@@ -176,7 +176,7 @@ func validateArgs() error {
 		break
 	case ETHER:
 		if recipientFlag.IsSet() == false {
-			err = errors.New("Must specify a recipient to send ether [--recipient]")
+			err = errors.New("Must specify a valid recipient to send ether [--recipient]")
 		} else if len(args) > 1 {
 			err = errors.New("Can't supply multiple arguments/messages within a transaction")
 		}

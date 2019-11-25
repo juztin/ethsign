@@ -13,7 +13,7 @@ Utility to generate raw/signed Ethereum transactions offline.
 ##### Sending Ethereum
 
 ```
-ethsign ether --to 0x0000000000000000000000000000000000000000 --key keyfile.json --value 0.05
+ethsign ether --to 0x1111111111111111111111111111111111111111 --key keyfile.json --value 0.05
 ```
 
 ##### Send a message to a contract _(ERC-20 transfer)_
@@ -25,7 +25,7 @@ ethsign call "transfer(address,uint256)" 0xfffffffffffffffffffffffffffffffffffff
 
 **with ABI**
 ```
-ethsign call funcName arg1 arg2 --to 0x0000000000000000000000000000000000000000 --abi contract.abi --key keyfile.txt
+ethsign call funcName arg1 arg2 --to 0x1111111111111111111111111111111111111111 --abi contract.abi --key keyfile.txt
 ```
 
 ##### Contract Deployment
