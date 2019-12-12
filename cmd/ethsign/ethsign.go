@@ -47,11 +47,11 @@ var (
 	recipientFlag flags.AddressFlag
 
 	chainFlag    = flags.BigInt(big.NewInt(1337))
-	gasPriceFlag = flags.BigInt(big.NewInt(1))
+	gasPriceFlag = flags.Ether(big.NewInt(1), flags.GWEI)
 	gasLimitFlag = flag.Uint64("gasLimit", 100000, "The gas limit, in Gwei")
 	helpFlag     = flag.Bool("help", false, "Print ethsign usage")
 	nonceFlag    = flag.Uint64("nonce", 0, "Next nonce for the address signing the transaction")
-	valueFlag    = flags.Ether(big.NewInt(0))
+	valueFlag    = flags.Ether(big.NewInt(0), flags.ETHER)
 )
 
 func init() {
@@ -172,7 +172,8 @@ func validateArgs() error {
 		} else if recipientFlag.IsSet() {
 			err = errors.New("Recipient can't be set for contract deployment")
 		}
-		methodArgs = args
+		method = args[0]
+		methodArgs = args[1:]
 		break
 	case ETHER:
 		if recipientFlag.IsSet() == false {
@@ -201,7 +202,7 @@ func readBin(binFile string) ([]byte, error) {
 	return hex.DecodeString(string(b))
 }
 
-func callInputABI(funcName string, args []string, abiFile string) ([]byte, error) {
+func callInputABI(methodSig string, args []string, abiFile string) ([]byte, error) {
 	a, err := readABI(abiFile)
 	if err != nil {
 		return nil, err
@@ -210,9 +211,9 @@ func callInputABI(funcName string, args []string, abiFile string) ([]byte, error
 	// Ensure the given function name exists within the ABI
 	var m abi.Method
 	ok := true
-	if funcName == "" {
+	if methodSig == "" {
 		m = a.Constructor
-	} else if m, ok = a.Methods[funcName]; !ok {
+	} else if m, ok = a.Methods[methodSig]; !ok {
 		return nil, errors.New("missing function in ABI")
 	}
 
@@ -223,11 +224,11 @@ func callInputABI(funcName string, args []string, abiFile string) ([]byte, error
 	}
 
 	// Generate packed call
-	input, err := a.Pack(funcName, funcArgs...)
+	input, err := a.Pack(methodSig, funcArgs...)
 	return input, err
 }
 
-func deployInputABI(args []string, binFile, abiFile string) ([]byte, error) {
+func deployInputABI(methodSig string, args []string, binFile, abiFile string) ([]byte, error) {
 	input, err := callInputABI("", args, abiFile)
 	if err != nil {
 		return input, err
@@ -237,7 +238,7 @@ func deployInputABI(args []string, binFile, abiFile string) ([]byte, error) {
 }
 
 func deployInputRaw(methodSig string, args []string, binFile string) ([]byte, error) {
-	input, err := parser.ParseMethod("", args)
+	input, err := parser.ParseConstructor(methodSig, args)
 	if err != nil {
 		return input, err
 	}
@@ -308,9 +309,9 @@ func main() {
 		break
 	case DEPLOY:
 		if abiFlag.String() == "" {
-			data, err = deployInputRaw(method, args, binFlag.String())
+			data, err = deployInputRaw(method, methodArgs, binFlag.String())
 		} else {
-			data, err = deployInputABI(args, binFlag.String(), abiFlag.String())
+			data, err = deployInputABI(method, methodArgs, binFlag.String(), abiFlag.String())
 		}
 		tx = types.NewContractCreation(*nonceFlag, valueFlag.Value(), *gasLimitFlag, gasPriceFlag.Value(), data)
 		break
@@ -327,7 +328,6 @@ func main() {
 
 	// Print raw, signed, hex-string transaction
 	t := types.Transactions{tx}
-	rawTxBytes := t.GetRlp(0)
-	rawTxHex := hex.EncodeToString(rawTxBytes)
-	fmt.Printf(rawTxHex)
+	rawTx := t.GetRlp(0)
+	fmt.Printf("0x%x", rawTx)
 }

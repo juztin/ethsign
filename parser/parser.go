@@ -43,6 +43,21 @@ func ParseValue(kind, value string) (interface{}, error) {
 	return o, err
 }
 
+// ParseConstructor parses the given args to the corresponding types found within the constructor, returning the raw data
+func ParseConstructor(constructor string, args []string) ([]byte, error) {
+	// Remove all whitespace – " test( string, bool)" => "test(string,bool)"
+	constructor = strings.Replace(constructor, " ", "", -1)
+	_, constructorArgs, err := parseMethodString(constructor)
+	if err != nil {
+		return nil, err
+	}
+	data, err := parseMethodArgs(constructorArgs, args)
+	if err != nil {
+		return data, err
+	}
+	return data, nil
+}
+
 // ParseMethod parses the given args to the corresponding types found within the method signature, returning the raw data
 func ParseMethod(method string, args []string) ([]byte, error) {
 	// Remove all whitespace – " test( string, bool)" => "test(string,bool)"

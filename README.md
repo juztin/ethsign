@@ -38,7 +38,7 @@ ethsign deploy arg1 arg2 --abi contract.abi --bin contract.bin --key keyfile.jso
 **with ABI**
 ```
 ethsign deploy --bin contract.bin --key keyfile.json
-ethsign deploy constructor(string,uint256) arg1 arg2 --bin contract.bin --key keyfile.json
+ethsign deploy "constructor(string,uint256)" arg1 arg2 --bin contract.bin --key keyfile.json
 ```
 
 

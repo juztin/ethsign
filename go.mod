@@ -3,6 +3,7 @@ module github.com/juztin/ethsign
 go 1.13
 
 require (
+	fyne.io/fyne v1.1.2 // indirect
 	github.com/allegro/bigcache v1.2.1 // indirect
 	github.com/aristanetworks/goarista v0.0.0-20191023202215-f096da5361bb // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
