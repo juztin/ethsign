@@ -172,8 +172,12 @@ func validateArgs() error {
 		} else if recipientFlag.IsSet() {
 			err = errors.New("Recipient can't be set for contract deployment")
 		}
-		method = args[0]
-		methodArgs = args[1:]
+		if len(args) == 0 {
+			method = "constructor()"
+		} else {
+			method = args[0]
+			methodArgs = args[1:]
+		}
 		break
 	case ETHER:
 		if recipientFlag.IsSet() == false {

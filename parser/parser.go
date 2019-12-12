@@ -79,7 +79,10 @@ func parseMethodString(s string) ([]byte, []string, error) {
 	if start < 1 || end < start || end != len(s)-1 || len(s) <= 3 {
 		return nil, nil, errors.New("Invalid call")
 	}
-	args := strings.Split(s[start+1:end], ",")
+	var args []string
+	if start+1 < end-1 {
+		args = strings.Split(s[start+1:end], ",")
+	}
 	sig := crypto.Keccak256([]byte(s))[:4]
 	return sig, args, nil
 }
