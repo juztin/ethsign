@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"flag"
@@ -257,25 +258,6 @@ func etherInput(args []string) ([]byte, error) {
 	return []byte(args[0]), nil
 }
 
-func signTxWithKeystore(tx *types.Transaction, chainID *big.Int, keyPath string) (*types.Transaction, error) {
-	// Read keystore file
-	b, err := ioutil.ReadFile(keyPath)
-	if err != nil {
-		return nil, err
-	}
-
-	// Prompt for key password
-	fmt.Fprint(os.Stderr, "Passphrase: ")
-	p, err := terminal.ReadPassword(int(syscall.Stdin))
-	if err != nil {
-		return nil, err
-	}
-
-	// Decrypt and sign
-	k, err := keystore.DecryptKey(b, string(p))
-	return types.SignTx(tx, types.NewEIP155Signer(chainID), k.PrivateKey)
-}
-
 func signTxWithKey(tx *types.Transaction, chainID *big.Int, keyPath string) (*types.Transaction, error) {
 	// Read keystore file
 	b, err := ioutil.ReadFile(keyPath)
@@ -289,6 +271,29 @@ func signTxWithKey(tx *types.Transaction, chainID *big.Int, keyPath string) (*ty
 		return nil, err
 	}
 	return types.SignTx(tx, types.NewEIP155Signer(chainID), k)
+}
+
+func signTxWithKeystore(tx *types.Transaction, chainID *big.Int, keyPath string) (*types.Transaction, error) {
+	// Read keystore file
+	b, err := ioutil.ReadFile(keyPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Prompt for key password
+	fmt.Fprint(os.Stderr, "Passphrase: ")
+	p, err := terminal.ReadPassword(int(syscall.Stdin))
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println()
+
+	// Decrypt and sign
+	k, err := keystore.DecryptKey(b, string(p))
+	if err != nil {
+		return nil, err
+	}
+	return types.SignTx(tx, types.NewEIP155Signer(chainID), k.PrivateKey)
 }
 
 func main() {
@@ -332,6 +337,7 @@ func main() {
 
 	// Print raw, signed, hex-string transaction
 	t := types.Transactions{tx}
-	rawTx := t.GetRlp(0)
+	rawTx := new(bytes.Buffer)
+	t.EncodeIndex(0, rawTx)
 	fmt.Printf("0x%x", rawTx)
 }
